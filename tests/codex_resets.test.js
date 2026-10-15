@@ -56,6 +56,14 @@ test('answer：各档的动作、台词键和填空', () => {
   assert.strictEqual(R.answer(R.parse(base({ scheduled_reset: sched({ scheduled_for: null }) })), NOW, 0).vars.when, '很快')
 })
 
+test('answer：宣布之后已经重置了（站点记为已执行，或我们看到额度重置）→ 说已经重置了，不说没风声', () => {
+  const done = R.parse(base({ scheduled_reset: sched(), latest_reset: { id: '999', reset_type: 'regular', announced_at: '2026-10-14T13:00:00.000Z', text: 't', source: { type: 'x_post', author: 'thsottiaux', url: 'u' } } }))
+  assert.deepStrictEqual(R.answer(done, NOW, 0), { tier: 'done', pose: 'reset', key: 'resetDone', vars: {} })
+  const seen = R.parse(base({ scheduled_reset: sched() }))
+  assert.strictEqual(R.answer(seen, NOW, Date.parse('2026-10-14T13:00:00Z') / 1000).tier, 'done')
+  assert.strictEqual(R.toAnnounce(seen, NOW, Date.parse('2026-10-14T13:00:00Z') / 1000, []), null)   // 已经重置了：不主动说
+})
+
 test('answer：过期的预测按没有预测回答', () => {
   const d = R.parse(base({ active_watch: watch('strong', 90, { expires_at: '2026-10-14T14:00:00.000Z' }) }))
   assert.strictEqual(R.answer(d, NOW, 0).tier, 'none')
@@ -82,6 +90,6 @@ test('windowText / fill', () => {
 })
 
 test('LINES：每个台词键都有默认句', () => {
-  for (const k of ['resetAnnounced', 'resetHigh', 'resetMid', 'resetLow', 'resetNone', 'resetQuiet', 'resetOffline'])
+  for (const k of ['resetAnnounced', 'resetDone', 'resetHigh', 'resetMid', 'resetLow', 'resetNone', 'resetQuiet', 'resetOffline'])
     assert.ok(Array.isArray(R.LINES[k]) && R.LINES[k].length, k)
 })

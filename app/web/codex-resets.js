@@ -25,6 +25,8 @@
     if (!a || d.latest?.id === a.id || (resetSeenAt && resetSeenAt > a.at)) return null
     return a
   }
+  // 宣布过、而且已经执行了（站点记为已执行，或我们在宣布之后看到了 Codex 额度重置）
+  const doneAnnounced = (d, resetSeenAt) => !!(d?.announced && !liveAnnounced(d, resetSeenAt))
   const liveWatch = (d, now) => (d?.watch && (!d.watch.expires || d.watch.expires > now) ? d.watch : null)
 
   const pad = n => String(n).padStart(2, '0')
@@ -56,6 +58,7 @@
 
   function answer(d, now, resetSeenAt) {
     if (!d) return { tier: 'offline', pose: POSE.offline, key: 'resetOffline', vars: {} }
+    if (doneAnnounced(d, resetSeenAt)) return { tier: 'done', pose: 'reset', key: 'resetDone', vars: {} }   // 不能说「没风声」
     const tier = tierOf(d, now, resetSeenAt)
     if (tier === 'announced') { const a = liveAnnounced(d, resetSeenAt); return { tier, pose: POSE[tier], key: 'resetAnnounced', vars: { when: a.for ? fmt(a.for) : '很快' } } }
     if (tier === 'none') return d.stats
@@ -81,6 +84,7 @@
   // 默认台词（角色 character.json 的 lines 里写了同名键就用角色自己的）
   const LINES = {
     resetAnnounced: ['官方说了，要重置！预计 {when}。'],
+    resetDone: ['官方说的重置已经到了，额度满啦！'],
     resetHigh: ['这次很有戏：{chance}%，{window}。'],
     resetMid: ['有点风声，{chance}% 吧，别太指望。', '有点风声……别太指望。'],
     resetLow: ['有动静，但不太像。'],

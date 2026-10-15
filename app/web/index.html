@@ -1114,7 +1114,8 @@ function setQuota(id, q) {
   const wasLow = quota[id]?.low
   quota[id] = q
   const ev = quotaEvent(id, q)
-  if (ev === 'reset' && id === 'gpt') codexResetSeenAt = Date.now() / 1000   // 官方宣布之后真的重置了：额度下方那一行收起
+  // 官方宣布之后真的重置了：额度下方那一行收起。开发者控制台演「额度提前 reset」用的是假额度，不算（不然真实的宣布会被当成已经执行了）
+  if (ev === 'reset' && id === 'gpt' && !devActive) codexResetSeenAt = Date.now() / 1000
   if (ev) celebrate(id, ev)
   if (egg) return
   if (id === charId || quotaAggregate || standsIn(id)) renderQuota()   // 聚合 / 代演时别家额度变了也要重画
