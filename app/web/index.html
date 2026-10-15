@@ -361,6 +361,7 @@ function say(line) {
 // 出现新的强预测 / 新宣布，她闲着时主动说一次。连不上那个网站时安静失败（国内网络常见）
 const RESETS_URL = 'https://codex-resets.com/api/v1/status'
 let resetsOn = false, resetsData = null, resetsAt = 0, resetsTimer = null, codexResetSeenAt = 0, resetsWaiting = false
+let devResetsSaved = null   // 开发者控制台预演中：预演前的真实开关（见 devResetsPlay）
 function setCodexResets(on) {
   resetsOn = !!on
   clearTimeout(resetsTimer)
@@ -376,14 +377,15 @@ async function fetchResets() {
     if (!r.ok) return 10 * 60 * 1000
     const d = CodexResets.parse(await r.json())
     if (!d) return 10 * 60 * 1000
-    if (resetsOn) { resetsData = d; resetsAt = Date.now() }   // 查的途中关了开关：不写回
+    // 查的途中关了开关、或开发者控制台正在用假数据预演（开始预演前发出的查询这时才回来）：不写回
+    if (resetsOn && !devResetsSaved) { resetsData = d; resetsAt = Date.now() }
     return 30 * 60 * 1000
   } catch { return 10 * 60 * 1000 } finally { clearTimeout(timer) }
 }
 async function pollResets() {
   clearTimeout(resetsTimer)
   const wait = await fetchResets()
-  if (!resetsOn) return
+  if (!resetsOn || devResetsSaved) return   // 关了，或正在预演（演完 devResetsDone 会重新开始查）
   renderQuota()
   announceReset()
   clearTimeout(resetsTimer)   // 查的途中问她时可能已经续过一个定时：只留一个
@@ -448,7 +450,6 @@ function announceReset() {
   setTimeout(attempt, 3000)
 }
 // 开发者控制台「重置提醒」场景：不联网，用假数据演一档（data 是接口原样的 JSON，null = 连不上）；devResetsDone 恢复真实的
-let devResetsSaved = null
 function devResetsPlay(data) {
   if (!devResetsSaved) devResetsSaved = { on: resetsOn }
   resetsOn = true; clearTimeout(resetsTimer)
