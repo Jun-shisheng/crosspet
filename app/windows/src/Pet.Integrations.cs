@@ -138,7 +138,7 @@ namespace CrossPet
                 ["size"] = Scale, ["textSize"] = TextScale, ["textLinked"] = TextLinked, ["showName"] = ShowName, ["eggs"] = EggsEnabled, ["hideFullscreen"] = HideFullscreen, ["aura"] = AuraMode,
                 ["followApps"] = Store.Flag("followApps"), ["followEvents"] = Store.Flag("followEvents"),
                 ["gptQuota"] = Store.Flag("gptQuota"), ["agyQuota"] = Store.Flag("agyQuota"), ["gptQuotaNote"] = codexNote,
-                ["login"] = LoginEnabled, ["edgeDock"] = EdgeDockEnabled, ["dsQuota"] = DsQuotaEnabled, ["quotaAggregate"] = QuotaAggregate, ["powerSave"] = PowerSave,
+                ["login"] = LoginEnabled, ["edgeDock"] = EdgeDockEnabled, ["dsQuota"] = DsQuotaEnabled, ["quotaAggregate"] = QuotaAggregate, ["codexResets"] = CodexResets, ["powerSave"] = PowerSave,
                 ["hideHotkey"] = HideHotkey, ["hotkeyFailed"] = hotkeyFailed,
                 ["hotkeys"] = new[] { new Dictionary<string, object> { ["id"] = "off", ["label"] = "不用快捷键" } }.Concat(HotkeyChoices.Select(h => new Dictionary<string, object> { ["id"] = h.id, ["label"] = h.label })).ToList(), ["aiAutostart"] = AIAutostart, ["character"] = current, ["updating"] = updating,
                 ["characters"] = Characters().Select(c =>
@@ -194,6 +194,7 @@ namespace CrossPet
                         case "hideFullscreen": Store.Settings["hideFullscreen"] = on; Store.SaveSettings(); ApplyLayer(); break;
                         case "hideHotkey": if (value is string hk) { Store.Settings["hideHotkey"] = hk; Store.SaveSettings(); RegisterHideHotKey(); } break;
                         case "quotaAggregate": Store.Settings["quotaAggregate"] = on; Store.SaveSettings(); Js($"setQuotaAggregate({(on ? "true" : "false")})"); break;
+                        case "codexResets": Store.Settings["codexResets"] = on; Store.SaveSettings(); Js($"setCodexResets({(on ? "true" : "false")})"); break;
                         case "powerSave": Store.Settings["powerSave"] = on; Store.SaveSettings(); Js($"setPowerSave({(on ? "true" : "false")})"); break;
                         case "eggs": Store.Settings["eggs"] = on; Store.SaveSettings(); Js($"setEggsEnabled({(on ? "true" : "false")})"); break;
                         case "aura":
@@ -245,6 +246,7 @@ namespace CrossPet
                         case "update": _ = SelfUpdate(); break;
                         case "checkUpdate": _ = CheckForUpdate(true); break;
                         case "openCharacters": Open(Store.Characters); break;
+                        case "openCodexResets": Open("https://codex-resets.com"); break;
                         case "openData": Open(Store.Data); break;
                         case "devConsole": OpenDev(); break;
                         case "feedback": OpenFeedback(); break;

@@ -43,6 +43,7 @@ namespace CrossPet
             menu.Items.Add(Item("摸摸头", () => Js("handleClick('pat')")));
             menu.Items.Add(Item("戳一下", () => Js("handleClick('poke')")));
             menu.Items.Add(Item("召唤彩蛋", () => Js("playEgg(true)")));
+            if (CodexResets && current == "gpt") menu.Items.Add(Item("会重置吗？", () => Js("askReset()")));   // 只有 GPT 有这个需求
             Sep();
             var switchTo = new Forms.ToolStripMenuItem("换角色");
             // 有别的衣服（皮肤）的角色展开成几项：「DeepSeek · 女仆装」「DeepSeek · Claude 卫衣」
