@@ -375,7 +375,7 @@ async function fetchResets() {
     if (!r.ok) return 10 * 60 * 1000
     const d = CodexResets.parse(await r.json())
     if (!d) return 10 * 60 * 1000
-    resetsData = d; resetsAt = Date.now()
+    if (resetsOn) { resetsData = d; resetsAt = Date.now() }   // 查的途中关了开关：不写回
     return 30 * 60 * 1000
   } catch { return 10 * 60 * 1000 } finally { clearTimeout(timer) }
 }
@@ -385,6 +385,7 @@ async function pollResets() {
   if (!resetsOn) return
   renderQuota()
   announceReset()
+  clearTimeout(resetsTimer)   // 查的途中问她时可能已经续过一个定时：只留一个
   resetsTimer = setTimeout(pollResets, wait)
 }
 function resetsTold(add) {
@@ -419,8 +420,7 @@ async function askReset() {
   const started = Date.now()
   if (Date.now() - resetsAt > 5 * 60 * 1000) {
     const wait = await fetchResets()
-    clearTimeout(resetsTimer); resetsTimer = setTimeout(pollResets, wait)
-    renderQuota()
+    if (resetsOn) { clearTimeout(resetsTimer); resetsTimer = setTimeout(pollResets, wait); renderQuota() }   // 问的途中关了开关：不再续上定时
   }
   await new Promise(r => setTimeout(r, Math.max(0, 1200 - (Date.now() - started))))   // 至少想 1.2 秒：数据是新的、或一下子就连不上时也看得见她在想
   if (charId === 'gpt' && !egg) tellReset()
@@ -433,8 +433,13 @@ function announceReset() {
   resetsWaiting = true
   let tries = 0
   const attempt = () => {
-    if (!resetsOn || charId !== 'gpt') { resetsWaiting = false; return }
-    if (pose === 'idle' && !egg && aiActivity() !== 'work' && $('bubble').classList.contains('hide')) {
+    // 等的途中过期了、宣布已经执行了：不说了
+    if (!resetsOn || charId !== 'gpt' || CodexResets.toAnnounce(resetsData, Date.now() / 1000, codexResetSeenAt, resetsTold())?.id !== a.id) { resetsWaiting = false; return }
+    // 闲着才说：额度紧张时她的待机样子是 tired、闲久了会睡着，这时也算闲着（重置的消息这时最有用）；
+    // tired / sleeping 时气泡里一直挂着「额度快用完了」「zZz」这种待机台词，可以直接盖过去，不用等它收起
+    const resting = pose === 'idle' || pose === 'tired' || pose === 'sleeping'
+    const quiet = $('bubble').classList.contains('hide') || pose !== 'idle'
+    if (resting && quiet && !egg && aiActivity() !== 'work') {
       resetsWaiting = false; resetsTold(a.id); tellReset(); return
     }
     if (++tries < 30) setTimeout(attempt, 20000); else resetsWaiting = false
