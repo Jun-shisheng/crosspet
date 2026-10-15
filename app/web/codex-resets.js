@@ -44,7 +44,8 @@
     return s || ''
   }
 
-  const POSE = { announced: 'reset', high: 'happy', mid: 'hum', low: 'sulk', none: 'idle', offline: 'idle' }
+  // 专属立绘（docs/prompts/重置提醒/）；没画的在 index.html 的 POSE_FALLBACK 里退回 reset / happy / hum / sulk
+  const POSE = { announced: 'reset_bell', high: 'reset_hope', mid: 'reset_maybe', low: 'reset_nope', none: 'reset_nope', offline: 'reset_nope' }
   function tierOf(d, now, resetSeenAt) {
     if (liveAnnounced(d, resetSeenAt)) return 'announced'
     const w = liveWatch(d, now)
@@ -54,12 +55,12 @@
   }
 
   function answer(d, now, resetSeenAt) {
-    if (!d) return { tier: 'offline', pose: 'idle', key: 'resetOffline', vars: {} }
+    if (!d) return { tier: 'offline', pose: POSE.offline, key: 'resetOffline', vars: {} }
     const tier = tierOf(d, now, resetSeenAt)
     if (tier === 'announced') { const a = liveAnnounced(d, resetSeenAt); return { tier, pose: POSE[tier], key: 'resetAnnounced', vars: { when: a.for ? fmt(a.for) : '很快' } } }
     if (tier === 'none') return d.stats
-      ? { tier, pose: 'idle', key: 'resetNone', vars: { since: d.stats.since.toFixed(1), avg: d.stats.avg.toFixed(1) } }
-      : { tier, pose: 'idle', key: 'resetQuiet', vars: {} }
+      ? { tier, pose: POSE.none, key: 'resetNone', vars: { since: d.stats.since.toFixed(1), avg: d.stats.avg.toFixed(1) } }
+      : { tier, pose: POSE.none, key: 'resetQuiet', vars: {} }
     const w = liveWatch(d, now)
     const key = { high: 'resetHigh', mid: 'resetMid', low: 'resetLow' }[tier]
     const window = windowText(w.window)

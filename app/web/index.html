@@ -201,6 +201,7 @@ const LOCAL_LINES = {
 Object.assign(LOCAL_LINES, CodexResets.LINES)   // 重置提醒的默认台词（角色自己写了同名键就用角色的）
 // 新加的姿态还没画立绘时，先用哪张顶上
 const POSE_FALLBACK = { compact: 'writing', reset: 'happy', feast: 'eat', sorry: 'listening', asking: 'listening', update: 'happy', bye: 'happy',
+  reset_check: 'thinking', reset_bell: 'reset', reset_hope: 'happy', reset_maybe: 'hum', reset_nope: 'sulk',   // Codex 重置提醒（见 codex-resets.js）
   busy_left: 'thinking', busy_right: 'thinking', swamped_left: 'busy_left', swamped_right: 'busy_right', edge_left: 'idle', edge_right: 'idle', edge_left_peek: 'edge_left', edge_right_peek: 'edge_right',
   annoyed: 'pout', puffed: 'pout', redhot: 'pout', sulk: 'pout', pout: 'surprised', dizzy: 'oops', coaxed: 'pat', forgiven: 'happy' }
 const TRANSIENT = { happy: 5000, proud: 6000, oops: 4000, surprised: 3000, pat: 4000, hum: 4000, stretch: 3200, yawn: 3000,
@@ -415,7 +416,7 @@ function tellReset() {
 async function askReset() {
   if (!resetsOn || charId !== 'gpt' || egg) return
   clearTimeout(revertTimer)
-  show('thinking', true)
+  show('reset_check', true)   // 刷手机查一下（没画就是 thinking）
   say(pick(linesOf('thinking') || ['……']))
   const started = Date.now()
   if (Date.now() - resetsAt > 5 * 60 * 1000) {
@@ -445,6 +446,19 @@ function announceReset() {
     if (++tries < 30) setTimeout(attempt, 20000); else resetsWaiting = false
   }
   setTimeout(attempt, 3000)
+}
+// 开发者控制台「重置提醒」场景：不联网，用假数据演一档（data 是接口原样的 JSON，null = 连不上）；devResetsDone 恢复真实的
+let devResetsSaved = null
+function devResetsPlay(data) {
+  if (!devResetsSaved) devResetsSaved = { on: resetsOn }
+  resetsOn = true; clearTimeout(resetsTimer)
+  resetsData = data ? CodexResets.parse(data) : null; resetsAt = Date.now()
+  renderQuota(); askReset()
+}
+function devResetsDone() {
+  if (!devResetsSaved) return
+  const was = devResetsSaved.on; devResetsSaved = null
+  resetsOn = false; setCodexResets(was)
 }
 // 额度下方那一行（只在官方宣布、还没执行时有）
 function appendResetNotice(el) {

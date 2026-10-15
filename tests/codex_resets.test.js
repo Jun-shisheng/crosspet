@@ -41,16 +41,18 @@ test('notice：宣布已执行就不显示（站点记为已执行，或我们�
 
 test('answer：各档的动作、台词键和填空', () => {
   const a = (data) => R.answer(R.parse(base(data)), NOW, 0)
-  assert.deepStrictEqual(a({ scheduled_reset: sched() }), { tier: 'announced', pose: 'reset', key: 'resetAnnounced', vars: { when: '10/16 14:00' } })
-  assert.deepStrictEqual(a({ active_watch: watch('strong', 85) }), { tier: 'high', pose: 'happy', key: 'resetHigh', vars: { chance: 85, window: '接下来 48 小时内' } })
+  assert.deepStrictEqual(a({ scheduled_reset: sched() }), { tier: 'announced', pose: 'reset_bell', key: 'resetAnnounced', vars: { when: '10/16 14:00' } })
+  assert.deepStrictEqual(a({ active_watch: watch('strong', 85) }), { tier: 'high', pose: 'reset_hope', key: 'resetHigh', vars: { chance: 85, window: '接下来 48 小时内' } })
   assert.strictEqual(a({ active_watch: watch('elevated', 70) }).tier, 'high')
   assert.strictEqual(a({ active_watch: watch('elevated', 50) }).tier, 'mid')
+  assert.strictEqual(a({ active_watch: watch('elevated', 50) }).pose, 'reset_maybe')
+  assert.strictEqual(a({ active_watch: watch('elevated', 10) }).pose, 'reset_nope')
   assert.strictEqual(a({ active_watch: watch('elevated', 29) }).tier, 'low')
   assert.strictEqual(a({ active_watch: watch('strong', null) }).tier, 'mid')     // 没给概率但等级高：不能说「不太像」
   assert.strictEqual(a({ active_watch: watch('elevated', null) }).tier, 'low')
-  assert.deepStrictEqual(a({}), { tier: 'none', pose: 'idle', key: 'resetNone', vars: { since: '1.4', avg: '6.5' } })
+  assert.deepStrictEqual(a({}), { tier: 'none', pose: 'reset_nope', key: 'resetNone', vars: { since: '1.4', avg: '6.5' } })
   assert.strictEqual(R.answer(R.parse(base({ stats: null })), NOW, 0).key, 'resetQuiet')
-  assert.deepStrictEqual(R.answer(null, NOW, 0), { tier: 'offline', pose: 'idle', key: 'resetOffline', vars: {} })
+  assert.deepStrictEqual(R.answer(null, NOW, 0), { tier: 'offline', pose: 'reset_nope', key: 'resetOffline', vars: {} })
   assert.strictEqual(R.answer(R.parse(base({ scheduled_reset: sched({ scheduled_for: null }) })), NOW, 0).vars.when, '很快')
 })
 
