@@ -197,6 +197,9 @@ extension App {
             case "quotaAggregate":
                 let on = value as? Bool ?? false
                 defaults.set(on, forKey: "quotaAggregate"); js("setQuotaAggregate(\(on))")
+            case "codexResets":
+                let on = value as? Bool ?? false
+                defaults.set(on, forKey: "codexResets"); js("setCodexResets(\(on))")
             case "dsQuota":
                 let on = value as? Bool ?? true
                 defaults.set(on, forKey: "dsQuota")
@@ -236,6 +239,7 @@ extension App {
             case "update": selfUpdate()
             case "checkUpdate": checkForUpdate(manual: true)
             case "openCharacters": openCharacters()
+            case "openCodexResets": NSWorkspace.shared.open(URL(string: "https://codex-resets.com")!)
             case "openData": NSWorkspace.shared.open(root)
             case "devConsole": openDevConsole()
             case "feedback": openFeedback()
