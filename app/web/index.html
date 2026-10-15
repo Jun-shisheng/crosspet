@@ -92,6 +92,7 @@ html.no-name #caption { display: none; }
 #quota:empty { display: none; }
 #quota div { white-space: nowrap; }
 #quota.low { color: #c0392b; background: rgba(255,236,236,.92); }
+#quota .notice { color: #6b4a3a; font-weight: 600; }   /* 重置提醒那一行：不跟着额度紧张变红 */
 /* 额度合并显示：一家 AI 一行，名字一列、每个额度窗口一列（quota-aggregate.js），只有紧张的百分比变红 */
 #quota.agg:not(:empty) { display: grid; justify-content: center; text-align: left; font-variant-numeric: tabular-nums; }
 #quota .qn { white-space: nowrap; padding-right: calc(7px * var(--k)); font-weight: 600; }
@@ -166,6 +167,7 @@ addEventListener('error', e => { if (e.target && e.target.tagName === 'IMG' && e
 <script src="quota-aggregate.js"></script>
 <script src="plugin-update.js"></script>
 <script src="stand-in.js"></script>
+<script src="codex-resets.js"></script>
 <script>
 // CrossPet 画面：由 CrossPet.app（Swift 外壳）调用这几个函数
 //   init(manifest)          角色清单（characters/*/character.json + 立绘）
@@ -196,6 +198,7 @@ const LOCAL_LINES = {
   idle: ['……', '在呢'], pat: ['嘿嘿', '（蹭蹭）'], surprised: ['诶？！'], hum: ['♪～'], stretch: ['伸个懒腰～'],
   yawn: ['哈啊……'], sleeping: ['zZz'], tired: ['有点累了…'],
 }
+Object.assign(LOCAL_LINES, CodexResets.LINES)   // 重置提醒的默认台词（角色自己写了同名键就用角色的）
 // 新加的姿态还没画立绘时，先用哪张顶上
 const POSE_FALLBACK = { compact: 'writing', reset: 'happy', feast: 'eat', sorry: 'listening', asking: 'listening', update: 'happy', bye: 'happy',
   busy_left: 'thinking', busy_right: 'thinking', swamped_left: 'busy_left', swamped_right: 'busy_right', edge_left: 'idle', edge_right: 'idle', edge_left_peek: 'edge_left', edge_right_peek: 'edge_right',
@@ -352,6 +355,103 @@ function say(line) {
   b.textContent = line
   b.classList.remove('hide')
 }
+// ---- Codex 重置提醒（设置里默认关；数据来自第三方网站 codex-resets.com，判断见 codex-resets.js）----
+// 只对 GPT 生效：官方提前宣布了重置，额度下方多一行；右键「会重置吗？」（外壳调 askReset）她按预测分档回答；
+// 出现新的强预测 / 新宣布，她闲着时主动说一次。连不上那个网站时安静失败（国内网络常见）
+const RESETS_URL = 'https://codex-resets.com/api/v1/status'
+let resetsOn = false, resetsData = null, resetsAt = 0, resetsTimer = null, codexResetSeenAt = 0, resetsWaiting = false
+function setCodexResets(on) {
+  resetsOn = !!on
+  clearTimeout(resetsTimer)
+  if (!resetsOn) { resetsData = null; resetsAt = 0; renderQuota(); return }
+  pollResets()
+}
+// 查一次：成功更新 resetsData；返回下次多久后再查（毫秒）。失败时保留上次查到的
+async function fetchResets() {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000)
+  try {
+    const r = await fetch(RESETS_URL, { signal: ctl.signal, cache: 'no-store' })
+    if (r.status === 429) return (parseInt(r.headers.get('Retry-After'), 10) || 1800) * 1000
+    if (!r.ok) return 10 * 60 * 1000
+    const d = CodexResets.parse(await r.json())
+    if (!d) return 10 * 60 * 1000
+    resetsData = d; resetsAt = Date.now()
+    return 30 * 60 * 1000
+  } catch { return 10 * 60 * 1000 } finally { clearTimeout(timer) }
+}
+async function pollResets() {
+  clearTimeout(resetsTimer)
+  const wait = await fetchResets()
+  if (!resetsOn) return
+  renderQuota()
+  announceReset()
+  resetsTimer = setTimeout(pollResets, wait)
+}
+function resetsTold(add) {
+  let list = []
+  try { list = JSON.parse(localStorage.getItem('crosspet-resets-told')) || [] } catch {}
+  if (add) { list = [...list.filter(x => x !== add), add].slice(-50); try { localStorage.setItem('crosspet-resets-told', JSON.stringify(list)) } catch {} }
+  return list
+}
+// 挑一句台词填空；没给概率时只挑不含 {chance} 的句子（都含就退回默认台词里不含的）
+function pickLine(key, vars) {
+  let list = linesOf(key) || ['']
+  if (!('chance' in vars)) {
+    const ok = list.filter(l => !l.includes('{chance}'))
+    list = ok.length ? ok : (CodexResets.LINES[key] || ['']).filter(l => !l.includes('{chance}'))
+    if (!list.length) list = ['']
+  }
+  return CodexResets.fill(pick(list), vars)
+}
+function tellReset() {
+  const a = CodexResets.answer(resetsData, Date.now() / 1000, codexResetSeenAt)
+  show(a.pose, true)
+  say(pickLine(a.key, a.vars))
+  clearTimeout(revertTimer)
+  revertTimer = setTimeout(() => { setPose(restPose()); say('') }, 8000)
+}
+// 右键「会重置吗？」：先想一下；数据超过 5 分钟没更新就现查
+async function askReset() {
+  if (!resetsOn || charId !== 'gpt' || egg) return
+  clearTimeout(revertTimer)
+  show('thinking', true)
+  say(pick(linesOf('thinking') || ['……']))
+  const started = Date.now()
+  if (Date.now() - resetsAt > 5 * 60 * 1000) {
+    const wait = await fetchResets()
+    clearTimeout(resetsTimer); resetsTimer = setTimeout(pollResets, wait)
+    renderQuota()
+  }
+  await new Promise(r => setTimeout(r, Math.max(0, 1200 - (Date.now() - started))))   // 至少想 1.2 秒：数据是新的、或一下子就连不上时也看得见她在想
+  if (charId === 'gpt' && !egg) tellReset()
+}
+// 主动说一次：只在她是 GPT、闲着时说；不是 GPT 就等 setCharacter 切到 GPT 时再调
+function announceReset() {
+  if (!resetsOn || charId !== 'gpt' || resetsWaiting) return
+  const a = CodexResets.toAnnounce(resetsData, Date.now() / 1000, codexResetSeenAt, resetsTold())
+  if (!a) return
+  resetsWaiting = true
+  let tries = 0
+  const attempt = () => {
+    if (!resetsOn || charId !== 'gpt') { resetsWaiting = false; return }
+    if (pose === 'idle' && !egg && aiActivity() !== 'work' && $('bubble').classList.contains('hide')) {
+      resetsWaiting = false; resetsTold(a.id); tellReset(); return
+    }
+    if (++tries < 30) setTimeout(attempt, 20000); else resetsWaiting = false
+  }
+  setTimeout(attempt, 3000)
+}
+// 额度下方那一行（只在官方宣布、还没执行时有）
+function appendResetNotice(el) {
+  if (!resetsOn || charId !== 'gpt') return
+  const t = CodexResets.notice(resetsData, codexResetSeenAt)
+  if (!t) return
+  const line = document.createElement('div')
+  line.className = 'notice'
+  line.textContent = t
+  if (el.className === 'agg') line.style.gridColumn = '1 / -1'   // 合并显示时是表格：这一行横跨整张表，放在最下面
+  el.appendChild(line)
+}
 // 额度聚合（设置里「合并显示各家额度」，默认关）：小窗把各家 AI 的额度排成几行，前面标名字；
 // 关着时只显示当前角色自己的额度。外壳在设置变化 / 启动时调 setQuotaAggregate
 let quotaAggregate = false
@@ -367,6 +467,7 @@ function renderQuota() {
     let ids = Object.keys(manifest?.characters || {}).filter(id => !manifest.characters[id].egg)
     if (!quotaAggregate) ids = StandIn.quotaIds(reactTo, charId, ids)
     QuotaAggregate.render(el, QuotaAggregate.rows(quota, charId, ids, id => manifest?.characters?.[id]?.name || id))
+    appendResetNotice(el)
     return
   }
   // 多个额度窗口 / 额度池用「｜」隔开，每个占一行，不在半中间折行
@@ -375,6 +476,7 @@ function renderQuota() {
     const line = document.createElement('div'); line.textContent = t; return line
   }))
   el.className = q?.low ? 'low' : ''
+  appendResetNotice(el)
 }
 // 临时动作（打招呼、开心、被摸头……）演完回到哪：AI 还在干活 / 等你回答就回到那个样子，
 // 不然一条要跑好几分钟的命令中途她演了个招呼，之后一直没有新事件，就会站着不动
@@ -450,6 +552,7 @@ function setCharacter(id, quiet) {
     if (quiet) say('')
     else if (!timeGreet(id, busy)) say(greetDue(id) ? (c.greeting || `${c.name} 在这儿～`) : '')
     renderQuota()
+    if (id === 'gpt') setTimeout(announceReset, 2000)   // 不是 GPT 时攒下的重置提醒，切过来再说
     const pend = pendingCelebration[id]
     if (pend && Date.now() - pend.at < 10 * 60 * 1000) setTimeout(() => celebrate(id, pend.ev), 1200)
     // 新立绘加载好再淡入，避免先看到空白
@@ -991,6 +1094,7 @@ function setQuota(id, q) {
   const wasLow = quota[id]?.low
   quota[id] = q
   const ev = quotaEvent(id, q)
+  if (ev === 'reset' && id === 'gpt') codexResetSeenAt = Date.now() / 1000   // 官方宣布之后真的重置了：额度下方那一行收起
   if (ev) celebrate(id, ev)
   if (egg) return
   if (id === charId || quotaAggregate || standsIn(id)) renderQuota()   // 聚合 / 代演时别家额度变了也要重画
