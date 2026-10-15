@@ -368,23 +368,25 @@ function setCodexResets(on) {
   if (!resetsOn) { resetsData = null; resetsAt = 0; renderQuota(); return }
   pollResets()
 }
-// 查一次：成功更新 resetsData；返回下次多久后再查（毫秒）。失败时保留上次查到的
+// 查一次：成功更新 resetsData。返回 { ok: 这次查到了没有, wait: 下次多久后再查（毫秒）}。
+// 失败时保留上次查到的（额度下方那一行、主动提醒照用：官方宣布不会因为断网就失效），但问她时照实说连不上
 async function fetchResets() {
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000)
+  const fail = { ok: false, wait: 10 * 60 * 1000 }
   try {
     const r = await fetch(RESETS_URL, { signal: ctl.signal, cache: 'no-store' })
-    if (r.status === 429) return (parseInt(r.headers.get('Retry-After'), 10) || 1800) * 1000
-    if (!r.ok) return 10 * 60 * 1000
+    if (r.status === 429) return { ok: false, wait: (parseInt(r.headers.get('Retry-After'), 10) || 1800) * 1000 }
+    if (!r.ok) return fail
     const d = CodexResets.parse(await r.json())
-    if (!d) return 10 * 60 * 1000
+    if (!d) return fail
     // 查的途中关了开关、或开发者控制台正在用假数据预演（开始预演前发出的查询这时才回来）：不写回
     if (resetsOn && !devResetsSaved) { resetsData = d; resetsAt = Date.now() }
-    return 30 * 60 * 1000
-  } catch { return 10 * 60 * 1000 } finally { clearTimeout(timer) }
+    return { ok: true, wait: 30 * 60 * 1000 }
+  } catch { return fail } finally { clearTimeout(timer) }
 }
 async function pollResets() {
   clearTimeout(resetsTimer)
-  const wait = await fetchResets()
+  const { wait } = await fetchResets()
   if (!resetsOn || devResetsSaved) return   // 关了，或正在预演（演完 devResetsDone 会重新开始查）
   renderQuota()
   announceReset()
@@ -407,26 +409,29 @@ function pickLine(key, vars) {
   }
   return CodexResets.fill(pick(list), vars)
 }
-function tellReset() {
-  const a = CodexResets.answer(resetsData, Date.now() / 1000, codexResetSeenAt)
+// data：按哪份数据回答（null = 连不上那个网站）
+function tellReset(data = resetsData) {
+  const a = CodexResets.answer(data, Date.now() / 1000, codexResetSeenAt)
   show(a.pose, true)
   say(pickLine(a.key, a.vars))
   clearTimeout(revertTimer)
   revertTimer = setTimeout(() => { setPose(restPose()); say('') }, 8000)
 }
-// 右键「会重置吗？」：先想一下；数据超过 5 分钟没更新就现查
+// 右键「会重置吗？」：先想一下，每次都现查（是你点的、不常点，查一次不费事）；这次没查到就照实说连不上，不拿旧结果顶替
 async function askReset() {
   if (!resetsOn || charId !== 'gpt' || egg) return
   clearTimeout(revertTimer)
   show('reset_check', true)   // 刷手机查一下（没画就是 thinking）
   say(pick(linesOf('thinking') || ['……']))
   const started = Date.now()
-  if (Date.now() - resetsAt > 5 * 60 * 1000) {
-    const wait = await fetchResets()
-    if (resetsOn) { clearTimeout(resetsTimer); resetsTimer = setTimeout(pollResets, wait); renderQuota() }   // 问的途中关了开关：不再续上定时
+  let ok = true
+  if (!devResetsSaved) {   // 开发者控制台预演：用它给的假数据，不联网
+    const r = await fetchResets()
+    ok = r.ok
+    if (resetsOn) { clearTimeout(resetsTimer); resetsTimer = setTimeout(pollResets, r.wait); renderQuota() }   // 问的途中关了开关：不再续上定时
   }
-  await new Promise(r => setTimeout(r, Math.max(0, 1200 - (Date.now() - started))))   // 至少想 1.2 秒：数据是新的、或一下子就连不上时也看得见她在想
-  if (charId === 'gpt' && !egg) tellReset()
+  await new Promise(r => setTimeout(r, Math.max(0, 1200 - (Date.now() - started))))   // 至少想 1.2 秒：一下子就查完、或一下子就连不上时也看得见她在想
+  if (charId === 'gpt' && !egg) tellReset(ok ? resetsData : null)
 }
 // 主动说一次：只在她是 GPT、闲着时说；不是 GPT 就等 setCharacter 切到 GPT 时再调
 function announceReset() {
