@@ -19,6 +19,15 @@ html, body { margin: 0; background: transparent; overflow: hidden; -webkit-user-
   font-size: calc(13px * var(--k)); line-height: 1.35; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.12);
   transition: opacity .3s, transform .3s; }
 #bubble.hide { opacity: 0; transform: translateY(4px); }
+/* 更新后的「新功能」卡片：放在气泡的位置（她头顶，挂在 #stage 上沿、和气泡一样往下压 10），不占排版、不改窗口大小 */
+#newsCard { position: absolute; z-index: 4; left: 50%; bottom: calc(100% - 10px * var(--k)); transform: translateX(-50%); width: max-content; max-width: calc(228px * var(--k));
+  padding: calc(4px * var(--k)) calc(11px * var(--k)) calc(2px * var(--k)); border-radius: calc(12px * var(--k)); background: rgba(255,255,255,.97);
+  border: calc(1.5px * var(--k)) solid var(--accent, #e0b48a); color: #4a2418; font-size: calc(13px * var(--k)); line-height: 1.3; text-align: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,.12); transition: opacity .3s; white-space: nowrap; }
+#newsCard.hidden { opacity: 0; visibility: hidden; }
+#newsCard .btns { display: flex; justify-content: center; gap: calc(10px * var(--k)); }
+#newsCard button { font: inherit; font-size: calc(12px * var(--k)); border: none; background: none; color: #998; padding: 0 calc(6px * var(--k)); min-height: calc(22px * var(--k)); cursor: pointer; }
+#newsCard button.go { color: #c8792f; font-weight: 600; }
 #stage { position: relative; width: 250px; height: 241px; transition: transform .32s ease, opacity .32s ease; }
 #stage.swap { transform: scale(.9) translateY(4%); opacity: 0; }
 #aura { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px 0 0 -120px;
@@ -153,6 +162,7 @@ html.no-name #caption { display: none; }
     <div id="body"><img id="a" class="on"><img id="b"><img id="blink"></div>
     <div id="fx"></div>
     <div id="cards"><div id="more"></div></div>
+    <div id="newsCard" class="hidden"><div id="newsText"></div><div class="btns"><button class="go" data-action="news-open">去看看 ›</button><button data-action="news-close">知道了</button></div></div>
     <div id="poof"><i style="--dx:-60px;--dy:-30px"></i><i style="--dx:55px;--dy:-35px"></i><i style="--dx:-45px;--dy:40px"></i><i style="--dx:50px;--dy:35px"></i><i style="--dx:0;--dy:-60px"></i></div>
   </div>
   <div id="foot"><div id="caption"></div><div id="quota"></div></div>
@@ -168,6 +178,7 @@ addEventListener('error', e => { if (e.target && e.target.tagName === 'IMG' && e
 <script src="plugin-update.js"></script>
 <script src="stand-in.js"></script>
 <script src="codex-resets.js"></script>
+<script src="whats-new.js"></script>
 <script>
 // CrossPet 画面：由 CrossPet.app（Swift 外壳）调用这几个函数
 //   init(manifest)          角色清单（characters/*/character.json + 立绘）
@@ -317,9 +328,9 @@ function hitRects() {
     const b = shownRect()
     return JSON.stringify(b ? [[b.left - 4, b.top - 4, b.width + 8, b.height + 8].map(Math.round)] : [])
   }
-  for (const id of ['body', 'bubble', 'caption', 'quota']) {
+  for (const id of ['body', 'bubble', 'caption', 'quota', 'newsCard']) {
     const el = $(id)
-    if (!el || (id === 'bubble' && el.classList.contains('hide'))) continue
+    if (!el || (id === 'bubble' && el.classList.contains('hide')) || el.classList.contains('hidden')) continue
     const cs = getComputedStyle(el)
     if (cs.display === 'none' || cs.visibility === 'hidden') continue
     const r = el.getBoundingClientRect()
@@ -751,12 +762,40 @@ function dockCut(side) {
 }
 
 // 刚更新完重新打开：开心一下告诉你现在是新版本（等登场招呼演完再说）
-function justUpdated(version) {
-  setTimeout(() => {
-    if (egg || farewellLine !== null) return
-    show('happy', true)
-    say(`更新好啦～现在是 ${version}`)
-  }, 6000)
+// 刚更新完（外壳检测到这次打开的版本比上次新）：这版有新功能就在头顶弹一张卡片「这次多了 N 个新功能」（去看看 / 知道了），
+// 没有（纯修 bug 的版本）就照旧说一句。last：上次的版本（跳过几版的合在一起算）。文案和判断在 whats-new.js
+function justUpdated(version, last) {
+  const n = window.WhatsNew ? WhatsNew.since(WhatsNew.LIST, last, version).length : 0
+  if (!n) {
+    setTimeout(() => {
+      if (egg || farewellLine !== null) return
+      show('happy', true)
+      say(`更新好啦～现在是 ${version}`)
+    }, 6000)
+    return
+  }
+  let tries = 0
+  const attempt = () => {
+    // 闲着才弹：不在彩蛋、AI 没在干活、没在道别 / 更新、没缩在边上；等不到就过一会儿再看，最多等 10 分钟（设置里的小红点还在）
+    const calm = (pose === 'idle' || pose === 'tired') && !egg && aiActivity() !== 'work' && farewellLine === null && !updatingNow && !tucked
+    if (calm) { showNews(n); return }
+    if (++tries < 30) setTimeout(attempt, 20000)
+  }
+  setTimeout(attempt, 6000)
+}
+let newsTimer = null
+function showNews(n) {
+  $('newsText').textContent = `更新好啦～这次多了 ${n} 个新功能`
+  say('')
+  show('happy', true)
+  $('newsCard').classList.remove('hidden')
+  clearTimeout(newsTimer)
+  newsTimer = setTimeout(hideNews, 30000)   // 不点也会自己收起
+}
+function hideNews() { clearTimeout(newsTimer); $('newsCard').classList.add('hidden') }
+// 网页 → 外壳：macOS 走 pet 消息通道，Windows 走 WebView2 的 postMessage
+function toShell(msg) {
+  try { if (window.chrome?.webview) window.chrome.webview.postMessage(msg); else window.webkit?.messageHandlers?.pet?.postMessage(msg) } catch {}
 }
 
 // Claude 的配置被别的工具改掉了（比如 CC Switch 3.x 切换服务商会整个重写 settings.json），外壳已经接回去了：说一声
@@ -1129,7 +1168,18 @@ function setQuota(id, q) {
   if (!q?.low && pose === 'tired') setPose('idle')
 }
 
-function handleClick(kind) {
+// x、y：外壳交来的点击位置（网页坐标，已经除掉人物大小的缩放）；不带坐标时和以前一样
+function handleClick(kind, x, y) {
+  const card = $('newsCard')
+  if (x != null && y != null && !card.classList.contains('hidden')) {
+    const r = card.getBoundingClientRect()
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {   // 点在卡片上：按钮照按钮办，空白处什么都不做（不摸头）
+      const action = document.elementFromPoint(x, y)?.closest('[data-action]')?.dataset.action
+      if (action === 'news-open') { hideNews(); toShell({ openSettings: 'news' }) }
+      else if (action === 'news-close') hideNews()
+      return
+    }
+  }
   if (egg) { catchEgg(); return }
   lastActive = Date.now()
   if (kind === 'pat' && Math.random() < EGG_CLICK_CHANCE && playEgg(true)) return
@@ -1353,6 +1403,7 @@ function playEgg(force) {
   if (!force && pose !== 'idle') return false
   const host = charId
   egg = { host, timers: [], waiting: false }
+  hideNews()   // 演彩蛋时「新功能」卡片收起
   clearTimeout(revertTimer); clearTimeout(pending)
   poof(() => {
     charId = eggId; pose = null; currentUrl = ''
