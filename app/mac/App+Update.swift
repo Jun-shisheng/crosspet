@@ -204,7 +204,11 @@ extension App {
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if webView === settingsWeb { pushSettings(); return }
+        if webView === settingsWeb {
+            pushSettings()
+            if let tab = pendingSettingsTab { pendingSettingsTab = nil; webView.evaluateJavaScript("showTab(\(quote(tab)))", completionHandler: nil) }
+            return
+        }
         if webView === feedbackWeb { return }   // 反馈页面自己发 get 来要信息
         if webView === devWeb {
             let info = ["version": currentVersion, "feedbackPath": feedbackURL.path]
