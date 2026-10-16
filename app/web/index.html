@@ -698,6 +698,8 @@ function notifyUpdate(tag) {
 // peek：鼠标移到露出来的那截上时换成探出来更多、好奇地看着你的那张（edge_*_peek），切口照样对齐屏幕边缘
 function setTucked(side, peek = false) {
   if (side === tucked && !!peek === tuckedPeek) return
+  // 「新功能」卡片开着时缩回边上：卡片挂在屏幕边、点不到——先收起，等她再出来、闲着的时候重新弹
+  if (side && !$('newsCard').classList.contains('hidden')) { hideNews(); queueNews(newsShown, 20000) }
   const was = tucked, edge = side || was
   preloadEdges()
   const before = shownRect()
@@ -774,20 +776,24 @@ function justUpdated(version, last) {
     }, 6000)
     return
   }
+  queueNews(n, 6000)
+}
+// 等她闲下来再弹：不在彩蛋、AI 没在干活、没在道别 / 更新、没缩在边上；等不到就过一会儿再看，最多等 10 分钟（设置里的小红点还在）
+function queueNews(n, first) {
   let tries = 0
   const attempt = () => {
-    // 闲着才弹：不在彩蛋、AI 没在干活、没在道别 / 更新、没缩在边上；等不到就过一会儿再看，最多等 10 分钟（设置里的小红点还在）
     const calm = (pose === 'idle' || pose === 'tired') && !egg && aiActivity() !== 'work' && farewellLine === null && !updatingNow && !tucked
     if (calm) { showNews(n); return }
     if (++tries < 30) setTimeout(attempt, 20000)
   }
-  setTimeout(attempt, 6000)
+  setTimeout(attempt, first)
 }
-let newsTimer = null
+let newsTimer = null, newsShown = 0
 function showNews(n) {
+  newsShown = n
   $('newsText').textContent = `更新好啦～这次多了 ${n} 个新功能`
-  say('')
   show('happy', true)
+  say('')   // 放在 show 后面：show 会说一句开心的台词（「完成！」之类），留在卡片底下，卡片一收起就露出来
   $('newsCard').classList.remove('hidden')
   clearTimeout(newsTimer)
   newsTimer = setTimeout(hideNews, 30000)   // 不点也会自己收起
