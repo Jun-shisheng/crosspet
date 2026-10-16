@@ -68,7 +68,7 @@ namespace CrossPet
                 layer.DropDownItems.Add(Item(title, () => { Store.Settings["layer"] = m; Store.SaveSettings(); ApplyLayer(); }, LayerMode == m));
             }
             menu.Items.Add(layer);
-            menu.Items.Add(Item("设置…", OpenSettings));
+            menu.Items.Add(Item("设置…", () => OpenSettings()));
             menu.Items.Add(Item("反馈问题…", OpenFeedback));
             if (developer) menu.Items.Add(Item("开发者控制台…", OpenDev));
             menu.Items.Add(Item("回到右下角", Recenter));
